@@ -35,38 +35,41 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         super(MainWindow, self).__init__()
         self.setupUi(self)
 
-        self.image_root: str = None
-        self.label_root:str = None
+        self.image_root: str = None # Store the direction of the un-annotated image folder
+        self.label_root:str = None # Store the direction of the wait-annotated image folder
 
-        self.files_list: list = []
-        self.current_index = None
-        self.current_file_index: int = None
+        self.files_list: list = [] # Store the file names as a list
+        self.current_index = None # Store the name of the current file
+        self.current_file_index: int = None # Store the index for the current file
 
-        self.current_label = '__background__'
-        self.current_group = 1
+        #self.current_label = '__background__' # The default label name, I think this is not nessary for river sands segmentation
+        #self.current_group = 1 # The default group index
 
+        # Load the config file
         self.config_file = CONFIG_FILE if os.path.exists(CONFIG_FILE) else DEFAULT_CONFIG_FILE
-        self.saved = True
-        self.can_be_annotated = True
-        self.load_finished = False
-        self.polygons:list = []
-
-        self.png_palette = None # 图像拥有调色盘，说明是单通道的标注png文件
-        self.instance_cmap = imgviz.label_colormap()
-        self.map_mode = MAPMode.LABEL
-        # 标注目标
+        self.saved = True # Keep saving
+        self.can_be_annotated = True # Keep annotating
+        self.load_finished = False # Default --> Variating
+        self.polygons:list = [] # Store more than one polygons
+        
+        # Set label colors
+        self.png_palette = None # Check if the png file has the attribute "palette"/The png file is recommended
+        self.instance_cmap = imgviz.label_colormap() # label_colormap set up projections color --> numbers
+        self.map_mode = MAPMode.LABEL # The default map mode is setting label
+        
+        # Annotating
         self.current_label:Annotation = None
         self.use_segment_anything = False
         self.gpu_resource_thread = None
 
-        # 新增 手动/自动 group选择
+        # Select group mode --> auto
         self.group_select_mode = 'auto'
 
-        self.init_ui()
-        self.reload_cfg()
+        self.init_ui() # Initiate UI
+        self.reload_cfg() # Reload config file
 
-        self.init_connect()
-        self.reset_action()
+        self.init_connect() # Initiate connection
+        self.reset_action() # Reset actions
 
     def init_segment_anything(self, model_name, reload=False):
 

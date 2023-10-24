@@ -20,36 +20,45 @@ class Object:
         self.note = note
 
 
+# Define specific method to annotate
 class Annotation:
     def __init__(self, image_path, label_path):
-        img_folder, img_name = os.path.split(image_path)
-        self.description = 'ISAT'
-        self.img_folder = img_folder
-        self.img_name = img_name
-        self.label_path = label_path
+        img_folder, img_name = os.path.split(image_path) # Load the folder name and names of each image
+        self.description = 'ISAT' # ISAT type
+        self.img_folder = img_folder # Pass the loaded name of image folder
+        self.img_name = img_name # Pass the loaded name of each image
+        self.label_path = label_path # Pass the direction of the image folder
         self.note = ''
 
-        image = np.array(Image.open(image_path))
+        image = np.array(Image.open(image_path)) # From the path load all images via numpy package
+        """
+        @Parameter: ndim --> the number of image channels
+        """
+        # Three-channel images
         if image.ndim == 3:
             self.height, self.width, self.depth = image.shape
+        # Two-channel images
         elif image.ndim == 2:
             self.height, self.width = image.shape
             self.depth = 0
+        # Only-channel images/not images
         else:
             self.height, self.width, self.depth = image.shape[:, :3]
             print('Warning: Except image has 2 or 3 ndim, but get {}.'.format(image.ndim))
         del image
 
-        self.objects:List[Object,...] = []
+        self.objects:List[Object] = [] # For future store objects
 
+    # Load annotations
     def load_annotation(self):
+        # Ensure the path of labels has been loaded
         if os.path.exists(self.label_path):
             with open(self.label_path, 'r') as f:
                 dataset = load(f)
                 info = dataset.get('info', {})
-                description = info.get('description', '')
+                description = info.get('description', '') # Unpackage the type
                 if description == 'ISAT':
-                    # ISAT格式json
+                    # ISAT type is similar to json type
                     objects = dataset.get('objects', [])
                     self.img_name = info.get('name', '')
                     width = info.get('width', None)
@@ -75,18 +84,18 @@ class Annotation:
                         obj = Object(category, group, segmentation, area, layer, bbox, iscrowd, note)
                         self.objects.append(obj)
                 else:
-                    # labelme格式json
+                    # labelme type
                     print('Warning: Load LabelMe formate json.')
-                    shapes = dataset.get('shapes', {})
+                    shapes = dataset.get('shapes', {}) # Load shapes
                     for shape in shapes:
-                        # 只加载多边形
-                        is_polygon = shape.get('shape_type', '') == 'polygon'
+                        # Load polygons
+                        is_polygon = shape.get('shape_type', '') == 'polygon' # Find out the "polugon" in files
                         if not is_polygon:
                             continue
-                        category = shape.get('label', 'unknow')
-                        group = shape.get('group_id', 0)
+                        category = shape.get('label', 'unknow') # Find the category of polygon 
+                        group = shape.get('group_id', 0) # Find the group of polygens
                         if group is None: group = ''
-                        segmentation = shape.get('points', [])
+                        segmentation = shape.get('points', []) # Points --> Segments
                         iscrowd = shape.get('iscrowd', 0)
                         note = shape.get('note', '')
                         area = shape.get('area', 0)
