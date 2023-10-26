@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-# @Author  : LG
+# @Author  : LG (original); Keran Li (modified)
 
 from PyQt5 import QtWidgets, QtCore, QtGui
+from PyQt5.QtWidgets import QMessageBox
 from ui.MainWindow import Ui_MainWindow
 from widgets.setting_dialog import SettingDialog
 from widgets.category_choice_dialog import CategoryChoiceDialog
@@ -38,7 +39,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.image_root: str = None # Store the direction of the un-annotated image folder
         self.label_root:str = None # Store the direction of the wait-annotated image folder
 
-        self.files_list: list = [] # Store the file names as a list
+        self.files_list: list = [] # Store the plaine view file names as a list
+        self.plorized_list: list = [] # Store the plorized view file names as a list
         self.current_index = None # Store the name of the current file
         self.current_file_index: int = None # Store the index for the current file
 
@@ -51,6 +53,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.can_be_annotated = True # Keep annotating
         self.load_finished = False # Default --> Variating
         self.polygons:list = [] # Store more than one polygons
+
+        self.positive_scene = None 
         
         # Set label colors
         self.png_palette = None # Check if the png file has the attribute "palette"/The png file is recommended
@@ -71,28 +75,37 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.init_connect() # Initiate connection
         self.reset_action() # Reset actions
 
+    # Initialize the SAM
     def init_segment_anything(self, model_name, reload=False):
 
+        # Check if users have already import model weights
         if model_name == '':
-            self.use_segment_anything = False
+            self.use_segment_anything = False # No SAM weights --> Close SAM
             for name, action in self.pths_actions.items():
-                action.setChecked(model_name == name)
+                action.setChecked(model_name == name) # If no SAM, load SAM from path
             return
+        # Load the SAM weights
         model_path = os.path.join('segment_any', model_name)
+        # If the two checks ensure no model weights
         if not os.path.exists(model_path):
+            # Show how to download SAM model weights
             QtWidgets.QMessageBox.warning(self, 'Warning',
                                           'The checkpoint of [Segment anything] not existed. If you want use quick annotate, please download from {}'.format(
                                               'https://github.com/facebookresearch/segment-anything#model-checkpoints'))
             for name, action in self.pths_actions.items():
                 action.setChecked(model_name == name)
-            self.use_segment_anything = False
+            self.use_segment_anything = False # Close SAM
             return
 
+        # Establish a SAM
         self.segany = SegAny(model_path)
         self.use_segment_anything = True
+        # Show a message in the status bar, displaying model's name. The time is 3000/1000 seconds
         self.statusbar.showMessage('Use the checkpoint named {}.'.format(model_name), 3000)
+        # Unpackage path actions
         for name, action in self.pths_actions.items():
-            action.setChecked(model_name==name)
+            action.setChecked(model_name==name) # Show the model has been selected in UI
+        # Using SAM
         if self.use_segment_anything:
             if self.segany.device != 'cpu':
                 if self.gpu_resource_thread is None:
@@ -104,31 +117,37 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         else:
             self.labelGPUResource.setText('segment anything unused.')
 
+        # When images successfully loaded (have current_index), show image
         if self.current_index is not None:
             self.show_image(self.current_index)
 
     def init_ui(self):
-        #q
+        # Dialog window
         self.setting_dialog = SettingDialog(parent=self, mainwindow=self)
 
+        # Categories window
         self.categories_dock_widget = CategoriesDockWidget(mainwindow=self)
         self.categories_dock.setWidget(self.categories_dock_widget)
 
+        # Annotation window
         self.annos_dock_widget = AnnosDockWidget(mainwindow=self)
         self.annos_dock.setWidget(self.annos_dock_widget)
 
+        # Down-showing file dock window
         self.files_dock_widget = FilesDockWidget(mainwindow=self)
         self.files_dock.setWidget(self.files_dock_widget)
 
+        # Information window
         self.info_dock_widget = InfoDockWidget(mainwindow=self)
         self.info_dock.setWidget(self.info_dock_widget)
 
-        # 新增 group 选择 快捷键
+        # Shortcut for automatic group selection
         self.next_group_shortcut = QtWidgets.QShortcut(QtGui.QKeySequence("X"), self)
         self.prev_group_shortcut = QtWidgets.QShortcut(QtGui.QKeySequence("Z"), self)
         self.next_group_shortcut.setContext(QtCore.Qt.ApplicationShortcut)
         self.prev_group_shortcut.setContext(QtCore.Qt.ApplicationShortcut)
-        # 新增手动/自动 选择group
+
+        # Privious or next group selection
         self.next_group_shortcut.activated.connect(self.annos_dock_widget.go_to_next_group)
         self.prev_group_shortcut.activated.connect(self.annos_dock_widget.go_to_prev_group)
 
@@ -279,21 +298,49 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.setWindowTitle('*{}'.format(self.current_label.label_path))
 
     def open_dir(self):
-        dir = QtWidgets.QFileDialog.getExistingDirectory(self)
-        if dir:
-            self.files_list.clear()
-            self.files_dock_widget.listWidget.clear()
 
-            files = []
-            suffixs = tuple(['{}'.format(fmt.data().decode('ascii').lower()) for fmt in QtGui.QImageReader.supportedImageFormats()])
-            for f in os.listdir(dir):
-                if f.lower().endswith(suffixs):
-                    # f = os.path.join(dir, f)
-                    files.append(f)
-            files = sorted(files)
-            self.files_list = files
+        #选择负偏振图像文件夹
+        dir = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Negative Images Folder")
+        if not dir:
+            return
 
-            self.files_dock_widget.update_widget()
+        #清空原有图像列表
+        self.files_list.clear()
+        self.files_dock_widget.listWidget.clear()
+
+        #扫描负偏振图像文件夹
+        files = []
+        suffixes = ('.jpg', '.png', ...)
+        for f in os.listdir(dir):
+            if f.lower().endswith(suffixes):
+                files.append(f)
+
+        self.files_list = sorted(files)
+
+        #选择正交偏振图像文件夹
+        positive_dir = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Positive Images Folder")
+        if not positive_dir:
+            return
+        
+        #扫描正交偏振图像文件夹
+        positive_images = []
+        for f in os.listdir(positive_dir):
+            if f.lower().endswith(suffixes):
+                positive_images.append(f)
+
+        self.positive_images = sorted(positive_images)
+
+        #检查两者图像数目一致
+        if len(self.files_list) != len(self.positive_images):
+            QMessageBox.warning(self, 'Warning', '两文件夹图像数目不一致!')
+            return
+
+        #更新文件列表UI
+        self.files_dock_widget.update_widget()
+
+        #保存文件夹路径
+        self.image_root = dir
+        self.positive_image_root = positive_dir
 
         self.current_index = 0
 
@@ -334,6 +381,35 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.current_label = None
         self.load_finished = False
         self.saved = True
+   
+        # 加载负偏振图像
+        negative_path = os.path.join(self.image_root, self.files_list[index])
+        self.scene.load_image(negative_path)
+
+        # 获取正交偏振图像路径
+        positive_path = os.path.join(self.positive_image_root, self.positive_images[index])
+
+        # 创建负偏振场景和视图 
+        self.negative_scene = AnnotationScene(mainwindow=self)
+        self.negative_view = AnnotationView(parent=self)
+        self.negative_view.setScene(self.negative_scene)
+
+        # 创建正交偏振场景和视图
+        self.positive_scene = AnnotationScene(mainwindow=self)
+        self.positive_view = AnnotationView(parent=self)
+        self.positive_view.setScene(self.positive_scene)
+
+        # 在GUI界面添加positive_view
+        # 假设MainWindow有一个叫central_layout的总布局
+        self.central_layout.addWidget(self.negative_view)
+        self.central_layout.addWidget(self.positive_view)
+
+        # 加载负偏振图像
+        self.negative_scene.load_image(negative_path) 
+        
+        # 加载正交偏振图像
+        self.positive_scene.load_image(positive_path)
+
         if not -1 < index < len(self.files_list):
             self.scene.clear()
             self.scene.setSceneRect(QtCore.QRectF())
@@ -374,6 +450,98 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
             self.scene.load_image(file_path)
             self.view.zoomfit()
+
+            # load label
+            if self.can_be_annotated:
+                self.current_group = 1
+                _, name = os.path.split(file_path)
+                label_path = os.path.join(self.label_root, '.'.join(name.split('.')[:-1]) + '.json')
+                self.current_label = Annotation(file_path, label_path)
+                # 载入数据
+                self.current_label.load_annotation()
+
+                for object in self.current_label.objects:
+                    try:
+                        group = int(object.group)
+                        # 新增 手动/自动 group选择
+                        if self.group_select_mode == 'auto':
+                            self.current_group = group + 1 if group >= self.current_group else self.current_group
+                        elif self.group_select_mode == 'manual':
+                            self.current_group = 1
+                        self.categories_dock_widget.lineEdit_currentGroup.setText(str(self.current_group))
+                    except Exception as e:
+                        pass
+                    polygon = Polygon()
+                    self.scene.addItem(polygon)
+                    polygon.load_object(object)
+                    self.polygons.append(polygon)
+
+            if self.current_label is not None:
+                self.setWindowTitle('{}'.format(self.current_label.label_path))
+            else:
+                self.setWindowTitle('{}'.format(file_path))
+
+            self.annos_dock_widget.update_listwidget()
+            self.info_dock_widget.update_widget()
+            self.files_dock_widget.set_select(index)
+            self.current_index = index
+            self.files_dock_widget.label_current.setText('{}'.format(self.current_index+1))
+            self.load_finished = True
+
+        except Exception as e:
+            print(e)
+        finally:
+            if self.current_index > 0:
+                self.actionPrev.setEnabled(True)
+            else:
+                self.actionPrev.setEnabled(False)
+
+            if self.current_index < len(self.files_list) - 1:
+                self.actionNext.setEnabled(True)
+            else:
+                self.actionNext.setEnabled(False)
+        if not -1 < index < len(self.files_list):
+            self.scene.clear()
+            self.scene.setSceneRect(QtCore.QRectF())
+            return
+        try:
+            self.polygons.clear()
+            self.annos_dock_widget.listWidget.clear()
+            self.scene.cancel_draw()
+            file_path = os.path.join(self.image_root, self.files_list[index])
+            image_data = Image.open(file_path)
+
+            self.png_palette = image_data.getpalette()
+            if self.png_palette is not None and file_path.endswith('.png'):
+                self.statusbar.showMessage('This is a label file.')
+                self.can_be_annotated = False
+
+            else:
+                self.can_be_annotated = True
+
+            if self.can_be_annotated:
+                self.actionSegment_anything.setEnabled(self.use_segment_anything)
+                self.actionPolygon.setEnabled(True)
+                self.actionSave.setEnabled(True)
+                self.actionBit_map.setEnabled(True)
+                self.actionBackspace.setEnabled(True)
+                self.actionFinish.setEnabled(True)
+                self.actionCancel.setEnabled(True)
+                self.actionVisible.setEnabled(True)
+            else:
+                self.actionSegment_anything.setEnabled(False)
+                self.actionPolygon.setEnabled(False)
+                self.actionSave.setEnabled(False)
+                self.actionBit_map.setEnabled(False)
+                self.actionBackspace.setEnabled(False)
+                self.actionFinish.setEnabled(False)
+                self.actionCancel.setEnabled(False)
+                self.actionVisible.setEnabled(False)
+
+            self.scene.load_image(file_path)
+            self.view.zoomfit()
+        
+
 
             # load label
             if self.can_be_annotated:
