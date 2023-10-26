@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# @Author  : LG
+# @Author  : LG (original); Keran Li (modified)
 
 from PyQt5 import QtWidgets, QtGui, QtCore
 from widgets.polygon import Polygon, Vertex
@@ -7,33 +7,49 @@ from configs import STATUSMode, CLICKMode, DRAWMode, CONTOURMode
 from PIL import Image
 import numpy as np
 import cv2
-import time # 拖动鼠标描点
+import time 
 
+"""
+This code defines the class and functions for interactingly draw polygon
+with assistance of SAM
+"""
+# QGraphicsScene is a docker for storing 2D graphic objects
 class AnnotationScene(QtWidgets.QGraphicsScene):
     def __init__(self, mainwindow):
         super(AnnotationScene, self).__init__()
-        self.mainwindow = mainwindow
-        self.image_item:QtWidgets.QGraphicsPixmapItem = None
-        self.image_data = None
-        self.current_graph:Polygon = None
-        self.mode = STATUSMode.VIEW
-        self.click = CLICKMode.POSITIVE
-        self.draw_mode = DRAWMode.SEGMENTANYTHING           # 默认使用segment anything进行快速标注
-        self.contour_mode = CONTOURMode.SAVE_EXTERNAL       # 默认SAM只保留外轮廓
-        self.click_points = []                              # SAM point prompt
-        self.click_points_mode = []                         # SAM point prompt
-        self.masks:np.ndarray = None
-        self.mask_alpha = 0.5
-        self.top_layer = 1
+        self.mainwindow = mainwindow # Set up the mainwindow
+        """
+        QGraphicsPixmapItem is a sub-class from QGraphicsItem.
+        The feature of Pixmap has the same feature of QPixmap.
+        QPixmap is off-screen interation, meaning users can draw
+         and get stored.
+        A Chinese doc can be found in
+        https://blog.csdn.net/gongdiwudu/article/details/125372496
+        """
+        self.image_item:QtWidgets.QGraphicsPixmapItem = None # Inintialize a pixmap
+        self.image_data = None # For future storing image data/waiting for annotating
+        self.current_graph:Polygon = None # Ensuring current_graph can store plotted polygons
+        self.mode = STATUSMode.VIEW # Basiclly allowing view
+        self.click = CLICKMode.POSITIVE # Use the left clicks to crate polygons
+        self.draw_mode = DRAWMode.SEGMENTANYTHING # Default --> SAM
+        self.contour_mode = CONTOURMode.SAVE_EXTERNAL # Default --> Save external contours
+        self.click_points = [] # SAM point prompt
+        self.click_points_mode = [] # SAM point prompt
+        self.masks:np.ndarray = None # Masks are stored as ndarray
+        self.mask_alpha = 0.5 # Transparency
+        self.top_layer = 1 # Lowest layer
 
-        self.guide_line_x:QtWidgets.QGraphicsLineItem = None
-        self.guide_line_y:QtWidgets.QGraphicsLineItem = None
+        self.guide_line_x:QtWidgets.QGraphicsLineItem = None # Use lines to gain coordinates
+        self.guide_line_y:QtWidgets.QGraphicsLineItem = None # Use lines to gain coordinates
 
-        # 拖动鼠标描点     
+        # --------------------------------------------------------------------------------- #
+        # Click to gain prediction by SAM     
         self.last_draw_time = time.time()
         self.draw_interval = 0.15
         self.pressd = False
-
+        # --------------------------------------------------------------------------------- #
+    # --------------------------------------------------------------------------------- #
+    # Load annotating-waiting images
     def load_image(self, image_path:str):
         self.clear()
         if self.mainwindow.use_segment_anything:
@@ -41,11 +57,11 @@ class AnnotationScene(QtWidgets.QGraphicsScene):
 
         self.image_data = np.array(Image.open(image_path))
         if self.mainwindow.use_segment_anything and self.mainwindow.can_be_annotated:
-            if self.image_data.ndim == 3 and self.image_data.shape[-1] == 3: # 三通道图
+            if self.image_data.ndim == 3 and self.image_data.shape[-1] == 3: # Double check three-channel images
                 self.mainwindow.segany.set_image(self.image_data)
-            elif self.image_data.ndim == 2: # 单通道图
-                self.image_data = self.image_data[:, :, np.newaxis]
-                self.image_data = np.repeat(self.image_data, 3, axis=2) # 转换为三通道
+            elif self.image_data.ndim == 2: # Only channel image
+                self.image_data = self.image_data[:, :, np.newaxis] # Double-channel (length, width) --> (length, width, np.newaxis=1) 
+                self.image_data = np.repeat(self.image_data, 3, axis=2) # (0,1,2) --> (lengthm width, channel); 3 means repeating three times
                 self.mainwindow.segany.set_image(self.image_data)
             else:
                 self.mainwindow.statusbar.showMessage("Segment anything don't support the image with shape {} .".format(self.image_data.shape))
@@ -60,6 +76,7 @@ class AnnotationScene(QtWidgets.QGraphicsScene):
         self.image_item.setPixmap(QtGui.QPixmap(image_path))
         self.setSceneRect(self.image_item.boundingRect())
         self.change_mode_to_view()
+    # --------------------------------------------------------------------------------- #
 
     def change_mode_to_create(self):
         if self.image_item is None:
@@ -152,12 +169,12 @@ class AnnotationScene(QtWidgets.QGraphicsScene):
         self.start_draw()
 
     def start_draw(self):
-        # 只有view模式时，才能切换create模式
+        # Ensure create polygon by SAM only in the "create" mode
         if self.mode != STATUSMode.VIEW:
             return
-        # 否则，切换到绘图模式
+        # Or, back to "draw" mode
         self.change_mode_to_create()
-        # 绘图模式
+        # "Draw" mode
         if self.mode == STATUSMode.CREATE:
             self.current_graph = Polygon()
             self.addItem(self.current_graph)
@@ -202,6 +219,7 @@ class AnnotationScene(QtWidgets.QGraphicsScene):
                         self.current_graph = Polygon()
                         self.addItem(self.current_graph)
 
+                    # Make sure the polygons are closed
                     if len(contour) < 3:
                         continue
                     for point in contour:
