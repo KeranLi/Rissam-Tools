@@ -84,6 +84,8 @@
      <font>
       <family>Times New Roman</family>
       <pointsize>12</pointsize>
+      <weight>50</weight>
+      <bold>false</bold>
      </font>
     </property>
     <property name="title">
@@ -103,6 +105,8 @@
      <font>
       <family>Times New Roman</family>
       <pointsize>12</pointsize>
+      <weight>50</weight>
+      <bold>false</bold>
      </font>
     </property>
     <property name="title">
@@ -217,6 +221,10 @@
     <property name="title">
      <string>Mineral Tools</string>
     </property>
+    <addaction name="actionScaleTransfrom"/>
+    <addaction name="actionVizAxis"/>
+    <addaction name="actionv"/>
+    <addaction name="actionVisualize_Annotation_in_Colors"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuEdit"/>
@@ -867,6 +875,26 @@
      <family>Times New Roman</family>
      <pointsize>12</pointsize>
     </font>
+   </property>
+  </action>
+  <action name="actionScaleTransfrom">
+   <property name="text">
+    <string>Scale Transform</string>
+   </property>
+  </action>
+  <action name="actionVizAxis">
+   <property name="text">
+    <string>Visualize  Axis</string>
+   </property>
+  </action>
+  <action name="actionv">
+   <property name="text">
+    <string>Visualize Annotation in Black and White</string>
+   </property>
+  </action>
+  <action name="actionVisualize_Annotation_in_Colors">
+   <property name="text">
+    <string>Visualize Annotation in Colors</string>
    </property>
   </action>
  </widget>

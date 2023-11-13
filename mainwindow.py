@@ -44,8 +44,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.current_index = None # Store the name of the current file
         self.current_file_index: int = None # Store the index for the current file
 
-        #self.current_label = '__background__' # The default label name, I think this is not nessary for river sands segmentation
-        #self.current_group = 1 # The default group index
+        self.current_label = '__background__' # The default label name, I think this is not nessary for river sands segmentation
+        self.current_group = 1 # The default group index
 
         # Load the config file
         self.config_file = CONFIG_FILE if os.path.exists(CONFIG_FILE) else DEFAULT_CONFIG_FILE
