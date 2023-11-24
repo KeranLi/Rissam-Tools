@@ -19,6 +19,7 @@ from widgets.ISAT_to_COCO_dialog import ISATtoCOCODialog
 from widgets.ISAT_to_LABELME_dialog import ISATtoLabelMeDialog
 from widgets.COCO_to_ISAT_dialog import COCOtoISATDialog
 from widgets.canvas import AnnotationScene, AnnotationView
+from widgets.plane_plorized_dock_widget import PlanePlorizedDockWidget
 from configs import STATUSMode, MAPMode, load_config, save_config, CONFIG_FILE, DEFAULT_CONFIG_FILE
 from annotation import Object, Annotation
 from widgets.polygon import Polygon
@@ -127,6 +128,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def init_ui(self):
         # Dialog window
         self.setting_dialog = SettingDialog(parent=self, mainwindow=self)
+
+        # Plane and plorized images window
+        self.plane_plorized_dock_widget = PlanePlorizedDockWidget(mainwindow=self)
+        self.plane_plorized_dock.setWidget(self.plane_plorized_dock_widget)
 
         # Categories window
         self.categories_dock_widget = CategoriesDockWidget(mainwindow=self)
@@ -303,8 +308,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def open_dir(self):
 
         #选择单偏振图像文件夹
-        dir = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Negative Images Folder")
-        if not dir:
+        plane_dir = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Negative Images Folder")
+        if not plane_dir:
             return
 
         #清空原有图像列表
@@ -312,29 +317,29 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.files_dock_widget.listWidget.clear()
 
         #扫描单偏振图像文件夹
-        files = []
+        plane_images = []
         suffixes = ('.jpg', '.png', ...)
-        for f in os.listdir(dir):
+        for f in os.listdir(plane_dir):
             if f.lower().endswith(suffixes):
-                files.append(f)
+                plane_images.append(f)
 
-        self.files_list = sorted(files)
+        self.files_list = sorted(plane_images)
 
         #选择正交偏振图像文件夹
-        positive_dir = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Positive Images Folder")
-        if not positive_dir:
+        plorized_dir = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Positive Images Folder")
+        if not plorized_dir:
             return
         
         #扫描正交偏振图像文件夹
-        positive_images = []
-        for f in os.listdir(positive_dir):
+        plorized_images = []
+        for f in os.listdir(plorized_dir):
             if f.lower().endswith(suffixes):
-                positive_images.append(f)
+                plorized_images.append(f)
 
-        self.positive_images = sorted(positive_images)
+        self.plorized_images = sorted(plorized_images)
 
         #检查两者图像数目一致
-        if len(self.files_list) != len(self.positive_images):
+        if len(self.files_list) != len(self.plorized_images):
             QMessageBox.warning(self, 'Warning', '两文件夹图像数目不一致!')
             return
 
@@ -342,12 +347,12 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.files_dock_widget.update_widget()
 
         #保存文件夹路径
-        self.image_root = dir
-        self.positive_image_root = positive_dir
+        self.plane_image_root = plane_dir
+        self.plorized_image_root = plorized_dir
 
         self.current_index = 0
 
-        self.image_root = dir
+        self.image_root = plane_dir
         self.actionOpen_dir.setStatusTip("Image root: {}".format(self.image_root))
         if self.label_root is None:
             self.label_root = dir
@@ -386,37 +391,59 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.saved = True
    
         # 加载单偏振图像
-        negative_path = os.path.join(self.image_root, self.files_list[index])
-        self.scene.load_image(negative_path)
+        plane_path = os.path.join(self.plane_image_root, self.files_list[index])
+        self.scene.load_image(plane_path)
 
         # 获取正交偏振图像路径
-        positive_path = os.path.join(self.positive_image_root, self.positive_images[index])
-        self.scene.load_image(positive_path)
+        plorized_path = os.path.join(self.plorized_image_root, self.plorized_images[index])
+        self.scene.load_image(plorized_path)
 
-        # 创建负偏振场景和视图 
-        self.negative_scene = AnnotationScene(mainwindow=self)
-        self.negative_view = AnnotationView(parent=self)
-        self.negative_view.setScene(self.negative_scene)
+        # 创建单偏振场景和视图 
+        self.plane_scene = AnnotationScene(mainwindow=self)
+        self.plane_view = AnnotationView(parent=self)
+        self.plane_view.setScene(self.plane_scene)
 
         # 创建正交偏振场景和视图
-        self.positive_scene = AnnotationScene(mainwindow=self)
-        self.positive_view = AnnotationView(parent=self)
-        self.positive_view.setScene(self.positive_scene)
+        self.plorized_scene = AnnotationScene(mainwindow=self)
+        self.plorized_view = AnnotationView(parent=self)
+        self.plorized_view.setScene(self.plorized_scene)
 
-        # 在GUI界面添加positive_view
-        # 假设MainWindow有一个叫central_layout的总布局
-        self.central_layout.addWidget(self.negative_view)
-        self.negative_view.setGeometry(340, 100, 300, 300)  # 设置负偏振视图的尺寸和位置
-        self.central_layout.addWidget(self.positive_view)
-        self.positive_view.setGeometry(640, 100, 300, 300)  # 设置正交偏振视图的尺寸和位置
+        self.plane_plorized_dock_widget.set_images(plane_path, plorized_path)
 
-        # 加载负偏振图像
-        self.negative_scene.load_image(negative_path) 
-        self.negative_view.show()  # 显示负偏振视图
+        # # 在GUI界面添加positive_view
+        # self.central_layout.addWidget(self.negative_view)
+        # self.negative_view.setGeometry(340, 100, 300, 300)  # 设置负偏振视图的尺寸和位置
+        # self.central_layout.addWidget(self.positive_view)
+        # self.positive_view.setGeometry(640, 100, 300, 300)  # 设置正交偏振视图的尺寸和位置
+        # # 设置视图的缩放功能
+        # self.negative_view.setTransformationAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
+        # self.negative_view.setResizeAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
+        # self.positive_view.setTransformationAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
+        # self.positive_view.setResizeAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
         
-        # 加载正交偏振图像
-        self.positive_scene.load_image(positive_path)
-        self.positive_view.show()  # 显示正交偏振视图
+        # # 在GUI界面添加两个视图
+        # self.central_layout.addWidget(self.negative_view)
+        # self.negative_view.setGeometry(340, 100, 600, 600)  # 设置负偏振视图的尺寸和位置
+        # self.central_layout.addWidget(self.positive_view)
+        # self.positive_view.setGeometry(340, 700, 600, 600)  # 设置正交偏振视图的尺寸和位置
+       
+        # # 创建一个垂直布局
+        # vbox = QtWidgets.QVBoxLayout()
+       
+        # # 将两个视图添加到布局中
+        # vbox.addWidget(self.negative_view)
+        # vbox.addWidget(self.positive_view)
+       
+        # # 将布局设置为窗口的中心部件
+        # self.central_layout.addLayout(vbox)
+        
+        # # 加载负偏振图像
+        # self.negative_scene.load_image(negative_path) 
+        # self.negative_view.show()  # 显示负偏振视图
+        
+        # # 加载正交偏振图像
+        # self.positive_scene.load_image(positive_path)
+        # self.positive_view.show()  # 显示正交偏振视图
 
         if not -1 < index < len(self.files_list):
             self.scene.clear()
